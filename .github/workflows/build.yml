@@ -3,9 +3,10 @@ name: Build APK
 on:
   push:
     branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -53,9 +54,8 @@ jobs:
         name: app-release
         path: app/build/outputs/apk/release/*.apk
 
-    - name: Create Release
-      if: github.ref == 'refs/heads/main'
-      uses: softprops/action-gh-release@v1
+    - name: Create Release with APK
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: v1.0.0
         name: Magen Play 002 v1.0.0
