@@ -284,7 +284,7 @@ fun VideoConverterScreen(
                     if (isProcessing) {
                         Spacer(modifier = Modifier.height(16.dp))
                         LinearProgressIndicator(
-                            progress = { progress },
+                            progress = progress,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(8.dp)
@@ -353,9 +353,6 @@ fun FormatChip(
             .clip(RoundedCornerShape(12.dp)),
         shape = RoundedCornerShape(12.dp),
         color = if (isSelected) format.color.copy(alpha = 0.2f) else AnimeDarkCard,
-        border = if (isSelected) {
-            ButtonDefaults.outlinedButtonBorder
-        } else null,
         onClick = onClick
     ) {
         Column(
@@ -384,24 +381,20 @@ fun BitrateChip(
     isSelected: Boolean,
     onClick: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(10.dp)),
+    OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.weight(1f),
         shape = RoundedCornerShape(10.dp),
-        color = if (isSelected) AnimeBlue.copy(alpha = 0.2f) else AnimeDarkCard,
-        onClick = onClick
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (isSelected) AnimeBlue.copy(alpha = 0.2f) else AnimeDarkCard,
+            contentColor = if (isSelected) AnimeBlue else AnimeTextTertiary
+        ),
+        border = if (isSelected) ButtonDefaults.outlinedButtonBorder else null
     ) {
-        Box(
-            modifier = Modifier.padding(vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                bitrate,
-                style = MaterialTheme.typography.labelMedium,
-                color = if (isSelected) AnimeBlue else AnimeTextTertiary
-            )
-        }
+        Text(
+            bitrate,
+            style = MaterialTheme.typography.labelMedium
+        )
     }
 }
 
