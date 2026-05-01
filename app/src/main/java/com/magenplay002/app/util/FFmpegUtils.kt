@@ -3,9 +3,10 @@ package com.magenplay002.app.util
 import android.content.Context
 import android.os.Environment
 import android.util.Log
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.FFmpegSession
-import com.arthenica.ffmpegkit.ReturnCode
+import com.arthenica.mobileffmpeg.FFmpeg
+import com.arthenica.mobileffmpeg.FFprobe
+import com.arthenica.mobileffmpeg.MediaInformation
+import com.arthenica.mobileffmpeg.StreamInformation
 import java.io.File
 
 object FFmpegUtils {
@@ -88,10 +89,8 @@ object FFmpegUtils {
     }
 
     fun getMediaInfo(inputPath: String): MediaInfo? {
-        // Using ffprobe through FFmpegKit
         try {
-            val session = FFmpegKit.getMediaInformation(inputPath)
-            val mediaInfo = session?.mediaInformation
+            val mediaInfo: MediaInformation? = FFprobe.getMediaInformation(inputPath)
 
             if (mediaInfo != null) {
                 val duration = mediaInfo.duration?.toLongOrNull() ?: 0L
@@ -107,13 +106,14 @@ object FFmpegUtils {
                 var channels = ""
 
                 streams?.forEach { stream ->
-                    when (stream.type) {
-                        "video" -> {
+                    val streamType = stream.type
+                    when {
+                        streamType == "video" -> {
                             width = stream.width?.toIntOrNull() ?: 0
                             height = stream.height?.toIntOrNull() ?: 0
                             videoCodec = stream.codec ?: ""
                         }
-                        "audio" -> {
+                        streamType == "audio" -> {
                             audioCodec = stream.codec ?: ""
                             sampleRate = stream.sampleRate ?: ""
                             channels = stream.channelLayout ?: ""
@@ -144,19 +144,19 @@ object FFmpegUtils {
         onProgress: (Double) -> Unit,
         onComplete: (Boolean, String?) -> Unit
     ) {
-        val session: FFmpegSession = FFmpegKit.executeWithArguments(command.toList())
+        val rc = FFmpeg.execute(command)
 
-        when {
-            ReturnCode.isSuccess(session.returnCode) -> {
+        when (rc) {
+            com.arthenica.mobileffmpeg.ReturnCode.SUCCESS -> {
                 onComplete(true, null)
             }
-            ReturnCode.isCancel(session.returnCode) -> {
+            com.arthenica.mobileffmpeg.ReturnCode.CANCEL -> {
                 onComplete(false, "Operation cancelled")
             }
             else -> {
-                val output = session.output
-                Log.e(TAG, "FFmpeg command failed: $output")
-                onComplete(false, "FFmpeg error: ${session.failStackTrace}")
+                val output = com.arthenica.mobileffmpeg.Config.getLastCommandOutput()
+                Log.e(TAG, "FFmpeg command failed with rc=$rc: $output")
+                onComplete(false, "FFmpeg error: rc=$rc")
             }
         }
     }

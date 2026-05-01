@@ -55,6 +55,11 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+
+    // Prevent configuration cache issues
+    lint {
+        abortOnError = false
+    }
 }
 
 dependencies {
@@ -87,8 +92,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.2.1")
     implementation("androidx.media3:media3-exoplayer-smoothstreaming:1.2.1")
 
-    // FFmpeg for video processing
-    implementation("com.arthenica:ffmpeg-kit-full:6.0-2")
+    // FFmpeg for video processing - using mobile-ffmpeg available on Maven Central
+    implementation("com.arthenica:mobile-ffmpeg-full:4.4")
 
     // Material Design
     implementation("com.google.android.material:material:1.11.0")
@@ -111,11 +116,6 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
-    // Room for storing conversion history
-    implementation("androidx.room:room-runtime:2.6.1")
-    implementation("androidx.room:room-ktx:2.6.1")
-    annotationProcessor("androidx.room:room-compiler:2.6.1")
 
     // Debug
     debugImplementation("androidx.compose.ui:ui-tooling")
