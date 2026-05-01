@@ -16,6 +16,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -31,7 +32,7 @@ import java.io.File
 data class AudioFormat(
     val name: String,
     val extension: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val icon: ImageVector,
     val color: Color
 )
 
@@ -186,7 +187,7 @@ fun VideoConverterScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Format Grid
+                    // Format Grid - Row 1
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -195,11 +196,13 @@ fun VideoConverterScreen(
                             FormatChip(
                                 format = format,
                                 isSelected = selectedFormat == format.extension,
-                                onClick = { selectedFormat = format.extension }
+                                onClick = { selectedFormat = format.extension },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
                     Spacer(modifier = Modifier.height(8.dp))
+                    // Format Grid - Row 2
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -208,7 +211,8 @@ fun VideoConverterScreen(
                             FormatChip(
                                 format = format,
                                 isSelected = selectedFormat == format.extension,
-                                onClick = { selectedFormat = format.extension }
+                                onClick = { selectedFormat = format.extension },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -231,7 +235,8 @@ fun VideoConverterScreen(
                             BitrateChip(
                                 bitrate = bitrate,
                                 isSelected = selectedBitrate == bitrate,
-                                onClick = { selectedBitrate = bitrate }
+                                onClick = { selectedBitrate = bitrate },
+                                modifier = Modifier.weight(1f)
                             )
                         }
                     }
@@ -345,14 +350,15 @@ fun VideoConverterScreen(
 fun FormatChip(
     format: AudioFormat,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    Surface(
-        modifier = Modifier
-            .weight(1f)
-            .clip(RoundedCornerShape(12.dp)),
+    Card(
+        modifier = modifier,
         shape = RoundedCornerShape(12.dp),
-        color = if (isSelected) format.color.copy(alpha = 0.2f) else AnimeDarkCard,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) format.color.copy(alpha = 0.2f) else AnimeDarkCard
+        ),
         onClick = onClick
     ) {
         Column(
@@ -379,29 +385,34 @@ fun FormatChip(
 fun BitrateChip(
     bitrate: String,
     isSelected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    OutlinedButton(
-        onClick = onClick,
-        modifier = Modifier.weight(1f),
+    Card(
+        modifier = modifier,
         shape = RoundedCornerShape(10.dp),
-        colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = if (isSelected) AnimeBlue.copy(alpha = 0.2f) else AnimeDarkCard,
-            contentColor = if (isSelected) AnimeBlue else AnimeTextTertiary
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) AnimeBlue.copy(alpha = 0.2f) else AnimeDarkCard
         ),
-        border = if (isSelected) ButtonDefaults.outlinedButtonBorder else null
+        onClick = onClick
     ) {
-        Text(
-            bitrate,
-            style = MaterialTheme.typography.labelMedium
-        )
+        Box(
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                bitrate,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isSelected) AnimeBlue else AnimeTextTertiary
+            )
+        }
     }
 }
 
 @Composable
 fun AnimeConverterButton(
     text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     color: Color,
     enabled: Boolean = true,
     onClick: () -> Unit
