@@ -92,8 +92,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer-hls:1.2.1")
     implementation("androidx.media3:media3-exoplayer-smoothstreaming:1.2.1")
 
-    // FFmpeg for video processing - using mobile-ffmpeg available on Maven Central
-    implementation("com.arthenica:mobile-ffmpeg-full:4.4")
+    // Using Android's built-in MediaCodec/MediaMuxer/MediaExtractor APIs
+    // for video trimming and audio extraction (no FFmpeg dependency needed)
 
     // Material Design
     implementation("com.google.android.material:material:1.11.0")

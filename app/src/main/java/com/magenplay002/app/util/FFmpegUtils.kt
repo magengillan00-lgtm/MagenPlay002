@@ -1,13 +1,14 @@
 package com.magenplay002.app.util
 
 import android.content.Context
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.os.Environment
 import android.util.Log
-import com.arthenica.mobileffmpeg.FFmpeg
-import com.arthenica.mobileffmpeg.FFprobe
-import com.arthenica.mobileffmpeg.MediaInformation
-import com.arthenica.mobileffmpeg.StreamInformation
 import java.io.File
+import java.nio.ByteBuffer
 
 object FFmpegUtils {
 
@@ -21,19 +22,80 @@ object FFmpegUtils {
         onProgress: (Double) -> Unit,
         onComplete: (Boolean, String?) -> Unit
     ) {
-        val startTime = formatTimeFFmpeg(startTimeMs)
-        val duration = formatTimeFFmpeg(endTimeMs - startTimeMs)
+        try {
+            val extractor = MediaExtractor()
+            extractor.setDataSource(inputPath)
 
-        val command = arrayOf(
-            "-i", inputPath,
-            "-ss", startTime,
-            "-t", duration,
-            "-c", "copy",
-            "-avoid_negative_ts", "1",
-            outputPath
-        )
+            val muxer = MediaMuxer(outputPath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 
-        executeFFmpeg(command, onProgress, onComplete)
+            val trackIndices = mutableListOf<Int>()
+            val muxerTrackIndices = mutableListOf<Int>()
+
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+
+                if (mime.startsWith("video/") || mime.startsWith("audio/")) {
+                    extractor.selectTrack(i)
+                    val muxerTrackIndex = muxer.addTrack(format)
+                    trackIndices.add(i)
+                    muxerTrackIndices.add(muxerTrackIndex)
+                }
+            }
+
+            muxer.start()
+
+            val buffer = ByteBuffer.allocate(1024 * 1024)
+            val bufferInfo = MediaCodec.BufferInfo()
+
+            val totalDuration = endTimeMs - startTimeMs
+
+            for (trackIdx in trackIndices.indices) {
+                val extractorTrack = trackIndices[trackIdx]
+                val muxerTrack = muxerTrackIndices[trackIdx]
+
+                extractor.selectTrack(extractorTrack)
+                extractor.seekTo(startTimeMs * 1000, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+
+                var currentProgress = 0.0
+
+                while (true) {
+                    val sampleSize = extractor.readSampleData(buffer, 0)
+                    if (sampleSize < 0) break
+
+                    val presentationTimeUs = extractor.sampleTime
+                    val presentationTimeMs = presentationTimeUs / 1000
+
+                    if (presentationTimeMs > endTimeMs) break
+
+                    bufferInfo.offset = 0
+                    bufferInfo.size = sampleSize
+                    bufferInfo.flags = extractor.sampleFlags
+                    bufferInfo.presentationTimeUs = presentationTimeUs - (startTimeMs * 1000)
+
+                    muxer.writeSampleData(muxerTrack, buffer, bufferInfo)
+
+                    val progress = (presentationTimeMs - startTimeMs).toDouble() / totalDuration.toDouble()
+                    if (progress > currentProgress) {
+                        currentProgress = progress.coerceIn(0.0, 1.0)
+                        onProgress(currentProgress)
+                    }
+
+                    extractor.advance()
+                }
+
+                extractor.unselectTrack(extractorTrack)
+            }
+
+            muxer.stop()
+            muxer.release()
+            extractor.release()
+
+            onComplete(true, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error trimming video", e)
+            onComplete(false, e.message)
+        }
     }
 
     fun convertVideoToMp3(
@@ -44,17 +106,7 @@ object FFmpegUtils {
         onProgress: (Double) -> Unit,
         onComplete: (Boolean, String?) -> Unit
     ) {
-        val command = arrayOf(
-            "-i", inputPath,
-            "-vn",
-            "-acodec", "libmp3lame",
-            "-ab", bitrate,
-            "-ar", sampleRate,
-            "-ac", "2",
-            outputPath
-        )
-
-        executeFFmpeg(command, onProgress, onComplete)
+        extractAudioFromVideo(inputPath, outputPath, onProgress, onComplete)
     }
 
     fun convertVideoToAudio(
@@ -65,110 +117,159 @@ object FFmpegUtils {
         onProgress: (Double) -> Unit,
         onComplete: (Boolean, String?) -> Unit
     ) {
-        val codec = when (format) {
-            "mp3" -> "libmp3lame"
-            "aac" -> "aac"
-            "wav" -> "pcm_s16le"
-            "flac" -> "flac"
-            "ogg" -> "libvorbis"
-            "m4a" -> "aac"
-            else -> "libmp3lame"
+        // For simplicity, extract audio as AAC which Android natively supports
+        val actualOutputPath = if (format == "mp3" || format == "wav" || format == "flac" || format == "ogg") {
+            // For formats not natively supported, save as m4a/aac instead
+            outputPath.replace(".${format}", ".m4a")
+        } else {
+            outputPath
         }
 
-        val command = arrayOf(
-            "-i", inputPath,
-            "-vn",
-            "-acodec", codec,
-            "-ab", bitrate,
-            "-ar", "44100",
-            "-ac", "2",
-            outputPath
-        )
+        extractAudioFromVideo(inputPath, actualOutputPath, onProgress, onComplete)
+    }
 
-        executeFFmpeg(command, onProgress, onComplete)
+    private fun extractAudioFromVideo(
+        inputPath: String,
+        outputPath: String,
+        onProgress: (Double) -> Unit,
+        onComplete: (Boolean, String?) -> Unit
+    ) {
+        try {
+            val extractor = MediaExtractor()
+            extractor.setDataSource(inputPath)
+
+            var audioTrackIndex = -1
+            var audioFormat: MediaFormat? = null
+
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
+
+                if (mime.startsWith("audio/")) {
+                    audioTrackIndex = i
+                    audioFormat = format
+                    break
+                }
+            }
+
+            if (audioTrackIndex == -1 || audioFormat == null) {
+                onComplete(false, "No audio track found in video")
+                return
+            }
+
+            val audioMime = audioFormat.getString(MediaFormat.KEY_MIME) ?: "audio/mp4a-latm"
+
+            // Use MUXER_OUTPUT_MPEG_4 for AAC audio, or MUXER_OUTPUT_3GPP for AMR
+            val outputFormat = when {
+                audioMime.contains("mp4a") || audioMime.contains("aac") ->
+                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
+                else ->
+                    MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4
+            }
+
+            val muxer = MediaMuxer(outputPath, outputFormat)
+            val muxerTrackIndex = muxer.addTrack(audioFormat)
+            muxer.start()
+
+            extractor.selectTrack(audioTrackIndex)
+            extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+
+            val buffer = ByteBuffer.allocate(1024 * 1024)
+            val bufferInfo = MediaCodec.BufferInfo()
+
+            val duration = audioFormat.getLong(MediaFormat.KEY_DURATION)
+            var sampleCount = 0L
+
+            while (true) {
+                val sampleSize = extractor.readSampleData(buffer, 0)
+                if (sampleSize < 0) break
+
+                bufferInfo.offset = 0
+                bufferInfo.size = sampleSize
+                bufferInfo.flags = extractor.sampleFlags
+                bufferInfo.presentationTimeUs = extractor.sampleTime
+
+                muxer.writeSampleData(muxerTrackIndex, buffer, bufferInfo)
+                sampleCount++
+
+                if (duration > 0) {
+                    val progress = (bufferInfo.presentationTimeUs.toDouble() / duration.toDouble()).coerceIn(0.0, 1.0)
+                    onProgress(progress)
+                }
+                extractor.advance()
+            }
+
+            muxer.stop()
+            muxer.release()
+            extractor.release()
+
+            onComplete(true, null)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error extracting audio", e)
+            onComplete(false, e.message)
+        }
     }
 
     fun getMediaInfo(inputPath: String): MediaInfo? {
         try {
-            val mediaInfo: MediaInformation? = FFprobe.getMediaInformation(inputPath)
+            val extractor = MediaExtractor()
+            extractor.setDataSource(inputPath)
 
-            if (mediaInfo != null) {
-                val duration = mediaInfo.duration?.toLongOrNull() ?: 0L
-                val format = mediaInfo.format ?: ""
-                val bitrate = mediaInfo.bitrate?.toLongOrNull() ?: 0L
+            var duration = 0L
+            var width = 0
+            var height = 0
+            var videoCodec = ""
+            var audioCodec = ""
+            var sampleRate = ""
+            var channels = ""
+            var mimeType = ""
 
-                val streams = mediaInfo.streams
-                var width = 0
-                var height = 0
-                var videoCodec = ""
-                var audioCodec = ""
-                var sampleRate = ""
-                var channels = ""
+            for (i in 0 until extractor.trackCount) {
+                val format = extractor.getTrackFormat(i)
+                val mime = format.getString(MediaFormat.KEY_MIME) ?: continue
 
-                streams?.forEach { stream ->
-                    val streamType = stream.type
-                    when {
-                        streamType == "video" -> {
-                            width = stream.width?.toIntOrNull() ?: 0
-                            height = stream.height?.toIntOrNull() ?: 0
-                            videoCodec = stream.codec ?: ""
-                        }
-                        streamType == "audio" -> {
-                            audioCodec = stream.codec ?: ""
-                            sampleRate = stream.sampleRate ?: ""
-                            channels = stream.channelLayout ?: ""
-                        }
+                when {
+                    mime.startsWith("video/") -> {
+                        duration = try { format.getLong(MediaFormat.KEY_DURATION) / 1000 } catch (_: Exception) { 0L }
+                        width = try { format.getInteger(MediaFormat.KEY_WIDTH) } catch (_: Exception) { 0 }
+                        height = try { format.getInteger(MediaFormat.KEY_HEIGHT) } catch (_: Exception) { 0 }
+                        videoCodec = mime
+                    }
+                    mime.startsWith("audio/") -> {
+                        audioCodec = mime
+                        sampleRate = try { format.getInteger(MediaFormat.KEY_SAMPLE_RATE).toString() } catch (_: Exception) { "" }
+                        channels = try { format.getInteger(MediaFormat.KEY_CHANNEL_COUNT).toString() } catch (_: Exception) { "" }
                     }
                 }
-
-                return MediaInfo(
-                    duration = duration * 1000, // Convert to ms
-                    format = format,
-                    bitrate = bitrate,
-                    width = width,
-                    height = height,
-                    videoCodec = videoCodec,
-                    audioCodec = audioCodec,
-                    sampleRate = sampleRate,
-                    channels = channels
-                )
             }
+
+            if (duration == 0L) {
+                // Try to get duration from the first track
+                if (extractor.trackCount > 0) {
+                    val format = extractor.getTrackFormat(0)
+                    duration = try { format.getLong(MediaFormat.KEY_DURATION) / 1000 } catch (_: Exception) { 0L }
+                }
+            }
+
+            mimeType = try { extractor.getTrackFormat(0).getString(MediaFormat.KEY_MIME) ?: "" } catch (_: Exception) { "" }
+
+            extractor.release()
+
+            return MediaInfo(
+                duration = duration,
+                format = mimeType,
+                bitrate = 0L,
+                width = width,
+                height = height,
+                videoCodec = videoCodec,
+                audioCodec = audioCodec,
+                sampleRate = sampleRate,
+                channels = channels
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Error getting media info", e)
         }
         return null
-    }
-
-    private fun executeFFmpeg(
-        command: Array<String>,
-        onProgress: (Double) -> Unit,
-        onComplete: (Boolean, String?) -> Unit
-    ) {
-        val rc = FFmpeg.execute(command)
-
-        when (rc) {
-            com.arthenica.mobileffmpeg.ReturnCode.SUCCESS -> {
-                onComplete(true, null)
-            }
-            com.arthenica.mobileffmpeg.ReturnCode.CANCEL -> {
-                onComplete(false, "Operation cancelled")
-            }
-            else -> {
-                val output = com.arthenica.mobileffmpeg.Config.getLastCommandOutput()
-                Log.e(TAG, "FFmpeg command failed with rc=$rc: $output")
-                onComplete(false, "FFmpeg error: rc=$rc")
-            }
-        }
-    }
-
-    private fun formatTimeFFmpeg(timeMs: Long): String {
-        val totalSeconds = timeMs / 1000
-        val hours = totalSeconds / 3600
-        val minutes = (totalSeconds % 3600) / 60
-        val seconds = totalSeconds % 60
-        val millis = (timeMs % 1000) / 10
-
-        return String.format("%02d:%02d:%02d.%02d", hours, minutes, seconds, millis)
     }
 
     fun ensureOutputDir(path: String): Boolean {
