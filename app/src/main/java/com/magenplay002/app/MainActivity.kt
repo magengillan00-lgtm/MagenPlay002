@@ -37,7 +37,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    MagenPlayApp()
+                    MagenPlayAppContent()
                 }
             }
         }
@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun MagenPlayApp() {
+fun MagenPlayAppContent() {
     val navController = rememberNavController()
     var selectedTab by rememberSaveable { mutableStateOf(0) }
 
