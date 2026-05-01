@@ -346,6 +346,7 @@ fun VideoConverterScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FormatChip(
     format: AudioFormat,
@@ -381,6 +382,7 @@ fun FormatChip(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BitrateChip(
     bitrate: String,
