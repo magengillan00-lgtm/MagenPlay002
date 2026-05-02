@@ -7,7 +7,7 @@ class MagenPlayApp : Application() {
     override fun onCreate() {
         super.onCreate()
         try {
-            instance = this
+            _instance = this
         } catch (e: Exception) {
             Log.e("MagenPlayApp", "Error initializing app", e)
         }
@@ -19,10 +19,5 @@ class MagenPlayApp : Application() {
 
         val instance: MagenPlayApp
             get() = _instance ?: throw IllegalStateException("MagenPlayApp not initialized")
-
-        // Setter for initialization
-        private set(value) {
-            _instance = value
-        }
     }
 }

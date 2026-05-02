@@ -9,16 +9,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import androidx.navigation.NavType
 import com.magenplay002.app.ui.converter.VideoConverterScreen
 import com.magenplay002.app.ui.editor.VideoEditorScreen
 import com.magenplay002.app.ui.player.VideoListScreen
@@ -46,7 +53,7 @@ class MainActivity : ComponentActivity() {
 fun MagenPlayAppContent() {
     val context = LocalContext.current
     val navController = rememberNavController()
-    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     // Permission handling
     var hasStoragePermission by remember {
@@ -93,7 +100,7 @@ fun MagenPlayAppContent() {
         }
         composable(
             route = "player/{videoPath}",
-            arguments = listOf(androidx.navigation.navArgument("videoPath") { type = androidx.navigation.NavType.StringType })
+            arguments = listOf(navArgument("videoPath") { type = NavType.StringType })
         ) { backStackEntry ->
             val videoPath = backStackEntry.arguments?.getString("videoPath") ?: ""
             VideoPlayerScreen(
@@ -136,7 +143,7 @@ fun PermissionRequestScreen(
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
-                imageVector = androidx.compose.material.icons.Icons.Default.VideoLibrary,
+                imageVector = Icons.Default.VideoLibrary,
                 contentDescription = null,
                 modifier = Modifier.size(80.dp),
                 tint = MaterialTheme.colorScheme.primary
@@ -156,8 +163,10 @@ fun PermissionRequestScreen(
             Spacer(modifier = Modifier.height(32.dp))
             Button(
                 onClick = onRequestPermission,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp),
+                shape = RoundedCornerShape(16.dp)
             ) {
                 Text("Grant Permission", style = MaterialTheme.typography.titleMedium)
             }
@@ -195,9 +204,4 @@ private fun requestStoragePermissions(
             )
         )
     }
-}
-
-@Composable
-private fun rememberSaveable(initial: () -> Int): MutableState<Int> {
-    return remember { mutableStateOf(initial()) }
 }
