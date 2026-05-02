@@ -89,7 +89,20 @@ fun MagenPlay002Theme(
             val window = (view.context as Activity).window
             window.statusBarColor = colorScheme.background.toArgb()
             window.navigationBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
+            } else {
+                @Suppress("DEPRECATION")
+                window.decorView.systemUiVisibility = if (!darkTheme) {
+                    window.decorView.systemUiVisibility or
+                        @Suppress("DEPRECATION")
+                        android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                } else {
+                    window.decorView.systemUiVisibility and
+                        @Suppress("DEPRECATION")
+                        android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+                }
+            }
         }
     }
 

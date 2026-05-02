@@ -1,6 +1,5 @@
 package com.magenplay002.app.util
 
-import android.content.ContentResolver
 import android.content.ContentUris
 import android.content.Context
 import android.database.Cursor
@@ -8,7 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.OpenableColumns
-import android.webkit.MimeTypeMap
+import android.util.Log
 import java.io.File
 
 data class VideoItem(
@@ -35,106 +34,143 @@ data class AudioItem(
 
 object FileUtils {
 
+    private const val TAG = "FileUtils"
+
     fun getAllVideos(context: Context): List<VideoItem> {
         val videos = mutableListOf<VideoItem>()
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
-        } else {
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        }
 
-        val projection = arrayOf(
-            MediaStore.Video.Media._ID,
-            MediaStore.Video.Media.DISPLAY_NAME,
-            MediaStore.Video.Media.DATA,
-            MediaStore.Video.Media.DURATION,
-            MediaStore.Video.Media.SIZE,
-            MediaStore.Video.Media.DATE_ADDED,
-            MediaStore.Video.Media.WIDTH,
-            MediaStore.Video.Media.HEIGHT,
-            MediaStore.Video.Media.MIME_TYPE
-        )
+        try {
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+            } else {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            }
 
-        val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
+            val projection = arrayOf(
+                MediaStore.Video.Media._ID,
+                MediaStore.Video.Media.DISPLAY_NAME,
+                MediaStore.Video.Media.DATA,
+                MediaStore.Video.Media.DURATION,
+                MediaStore.Video.Media.SIZE,
+                MediaStore.Video.Media.DATE_ADDED,
+                MediaStore.Video.Media.WIDTH,
+                MediaStore.Video.Media.HEIGHT,
+                MediaStore.Video.Media.MIME_TYPE
+            )
 
-        val cursor: Cursor? = context.contentResolver.query(
-            collection,
-            projection,
-            null,
-            null,
-            sortOrder
-        )
+            val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
 
-        cursor?.use {
-            val idColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-            val nameColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-            val pathColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
-            val durationColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
-            val sizeColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
-            val dateAddedColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
-            val widthColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
-            val heightColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
-            val mimeColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.MIME_TYPE)
-
-            while (it.moveToNext()) {
-                val id = it.getLong(idColumn)
-                val name = it.getString(nameColumn) ?: ""
-                val path = it.getString(pathColumn) ?: ""
-                val duration = it.getLong(durationColumn)
-                val size = it.getLong(sizeColumn)
-                val dateAdded = it.getLong(dateAddedColumn)
-                val width = it.getInt(widthColumn)
-                val height = it.getInt(heightColumn)
-                val mimeType = it.getString(mimeColumn) ?: ""
-
-                val contentUri = ContentUris.withAppendedId(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    id
+            val cursor: Cursor? = try {
+                context.contentResolver.query(
+                    collection,
+                    projection,
+                    null,
+                    null,
+                    sortOrder
                 )
-
-                val resolution = if (width > 0 && height > 0) "${width}x${height}" else ""
-
-                if (path.isNotEmpty() && File(path).exists()) {
-                    videos.add(
-                        VideoItem(
-                            id = id,
-                            name = name,
-                            path = path,
-                            duration = duration,
-                            size = size,
-                            dateAdded = dateAdded,
-                            thumbnail = contentUri,
-                            resolution = resolution,
-                            mimeType = mimeType
-                        )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error querying MediaStore", e)
+                // Fallback: try with EXTERNAL_CONTENT_URI
+                try {
+                    context.contentResolver.query(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        projection,
+                        null,
+                        null,
+                        sortOrder
                     )
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Fallback query also failed", e2)
+                    null
                 }
             }
+
+            cursor?.use {
+                val idColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                val nameColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                val pathColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+                val durationColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                val sizeColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                val dateAddedColumn = it.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+                val widthColumn = it.getColumnIndex(MediaStore.Video.Media.WIDTH)
+                val heightColumn = it.getColumnIndex(MediaStore.Video.Media.HEIGHT)
+                val mimeColumn = it.getColumnIndex(MediaStore.Video.Media.MIME_TYPE)
+
+                while (it.moveToNext()) {
+                    try {
+                        val id = it.getLong(idColumn)
+                        val name = it.getString(nameColumn) ?: ""
+                        val path = it.getString(pathColumn) ?: ""
+                        val duration = it.getLong(durationColumn)
+                        val size = it.getLong(sizeColumn)
+                        val dateAdded = it.getLong(dateAddedColumn)
+                        val width = if (widthColumn >= 0) it.getInt(widthColumn) else 0
+                        val height = if (heightColumn >= 0) it.getInt(heightColumn) else 0
+                        val mimeType = if (mimeColumn >= 0) it.getString(mimeColumn) ?: "" else ""
+
+                        val contentUri = ContentUris.withAppendedId(
+                            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                            id
+                        )
+
+                        val resolution = if (width > 0 && height > 0) "${width}x${height}" else ""
+
+                        if (path.isNotEmpty() && File(path).exists()) {
+                            videos.add(
+                                VideoItem(
+                                    id = id,
+                                    name = name,
+                                    path = path,
+                                    duration = duration,
+                                    size = size,
+                                    dateAdded = dateAdded,
+                                    thumbnail = contentUri,
+                                    resolution = resolution,
+                                    mimeType = mimeType
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error reading video entry", e)
+                        continue
+                    }
+                }
+            }
+        } catch (e: SecurityException) {
+            Log.e(TAG, "Storage permission not granted", e)
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error getting videos", e)
         }
+
         return videos
     }
 
     fun getVideoUriFromPath(context: Context, path: String): Uri? {
-        val projection = arrayOf(MediaStore.Video.Media._ID)
-        val selection = "${MediaStore.Video.Media.DATA} = ?"
-        val selectionArgs = arrayOf(path)
+        try {
+            val projection = arrayOf(MediaStore.Video.Media._ID)
+            val selection = "${MediaStore.Video.Media.DATA} = ?"
+            val selectionArgs = arrayOf(path)
 
-        val cursor = context.contentResolver.query(
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            selection,
-            selectionArgs,
-            null
-        )
+            val cursor = context.contentResolver.query(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                selection,
+                selectionArgs,
+                null
+            )
 
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val id = it.getLong(it.getColumnIndexOrThrow(MediaStore.Video.Media._ID))
-                return ContentUris.withAppendedId(
-                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
-                    id
-                )
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val id = it.getLong(it.getColumnIndexOrThrow(MediaStore.Video.Media._ID))
+                    return ContentUris.withAppendedId(
+                        MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                        id
+                    )
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting video URI", e)
         }
         return Uri.fromFile(File(path))
     }
@@ -162,14 +198,19 @@ object FileUtils {
 
     fun getFileName(context: Context, uri: Uri): String {
         var name = ""
-        val cursor = context.contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (nameIndex >= 0) {
-                    name = it.getString(nameIndex)
+        try {
+            val cursor = context.contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        name = it.getString(nameIndex)
+                    }
                 }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting file name", e)
+            name = uri.lastPathSegment ?: "unknown"
         }
         return name
     }
@@ -180,7 +221,11 @@ object FileUtils {
     }
 
     fun getMimeType(context: Context, uri: Uri): String {
-        return context.contentResolver.getType(uri) ?: ""
+        return try {
+            context.contentResolver.getType(uri) ?: ""
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     fun isVideoFile(mimeType: String): Boolean {

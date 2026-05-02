@@ -1,28 +1,28 @@
 package com.magenplay002.app
 
 import android.app.Application
-import android.os.Environment
+import android.util.Log
 
 class MagenPlayApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        instance = this
+        try {
+            instance = this
+        } catch (e: Exception) {
+            Log.e("MagenPlayApp", "Error initializing app", e)
+        }
     }
 
     companion object {
-        lateinit var instance: MagenPlayApp
-            private set
+        @Volatile
+        private var _instance: MagenPlayApp? = null
 
-        fun getOutputDirectory(): String {
-            return Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_MOVIES
-            ).absolutePath + "/MagenPlay"
-        }
+        val instance: MagenPlayApp
+            get() = _instance ?: throw IllegalStateException("MagenPlayApp not initialized")
 
-        fun getAudioOutputDirectory(): String {
-            return Environment.getExternalStoragePublicDirectory(
-                Environment.DIRECTORY_MUSIC
-            ).absolutePath + "/MagenPlay"
+        // Setter for initialization
+        private set(value) {
+            _instance = value
         }
     }
 }

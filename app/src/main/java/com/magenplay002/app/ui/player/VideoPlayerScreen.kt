@@ -1,6 +1,7 @@
 package com.magenplay002.app.ui.player
 
 import android.net.Uri
+import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
@@ -43,12 +45,14 @@ import kotlinx.coroutines.delay
 @Composable
 fun VideoListScreen(
     onVideoClick: (String) -> Unit,
+    selectedTab: Int,
+    onTabSelected: (Int) -> Unit,
     viewModel: VideoListViewModel = viewModel()
 ) {
     val videos by viewModel.videos.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val errorMessage by viewModel.errorMessage.collectAsState()
     val context = LocalContext.current
-    var selectedTab by remember { mutableStateOf(0) }
     var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
@@ -97,9 +101,38 @@ fun VideoListScreen(
             // Tab Row - Anime Style
             AnimeTabRow(
                 selectedTab = selectedTab,
-                onTabSelected = { selectedTab = it },
+                onTabSelected = onTabSelected,
                 tabs = listOf("Player", "Editor", "MP3 Converter")
             )
+
+            // Error Message
+            if (errorMessage.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = AnimeError.copy(alpha = 0.15f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Error,
+                            contentDescription = null,
+                            tint = AnimeError,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            errorMessage,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = AnimeError
+                        )
+                    }
+                }
+            }
 
             // Video Grid/List
             if (isLoading) {
@@ -145,6 +178,12 @@ fun VideoListScreen(
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = AnimeTextTertiary
                             )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            TextButton(onClick = { viewModel.loadVideos(context) }) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Refresh")
+                            }
                         }
                     }
                 } else {
@@ -353,12 +392,29 @@ fun VideoPlayerScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    var playerError by remember { mutableStateOf<String?>(null) }
+
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build().apply {
-            val mediaItem = MediaItem.fromUri(Uri.parse(videoPath))
-            setMediaItem(mediaItem)
-            prepare()
-            playWhenReady = true
+            try {
+                val uri = if (videoPath.startsWith("content://") || videoPath.startsWith("file://")) {
+                    Uri.parse(videoPath)
+                } else {
+                    Uri.fromFile(java.io.File(videoPath))
+                }
+                val mediaItem = MediaItem.fromUri(uri)
+                setMediaItem(mediaItem)
+                prepare()
+                playWhenReady = true
+
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        playerError = error.message ?: "Playback error"
+                    }
+                })
+            } catch (e: Exception) {
+                playerError = e.message ?: "Failed to initialize player"
+            }
         }
     }
 
@@ -366,7 +422,9 @@ fun VideoPlayerScreen(
 
     DisposableEffect(Unit) {
         onDispose {
-            exoPlayer.release()
+            try {
+                exoPlayer.release()
+            } catch (_: Exception) {}
         }
     }
 
@@ -382,76 +440,111 @@ fun VideoPlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Video Player
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                }
-            },
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable { showControls = !showControls }
-        )
-
-        // Controls overlay
-        AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn() + slideInVertically { -it },
-            exit = fadeOut() + slideOutVertically { -it },
-            modifier = Modifier.align(Alignment.TopCenter)
-        ) {
-            // Top bar
-            Row(
+        if (playerError != null) {
+            // Show error state
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)
-                        )
-                    )
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Default.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White
-                    )
-                }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    videoPath.substringAfterLast("/"),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-
-        // Center play/pause
-        AnimatedVisibility(
-            visible = showControls,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.align(Alignment.Center)
-        ) {
-            IconButton(
-                onClick = {
-                    if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
-                },
-                modifier = Modifier.size(64.dp)
+                    .fillMaxSize()
+                    .padding(32.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
             ) {
                 Icon(
-                    if (exoPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (exoPlayer.isPlaying) "Pause" else "Play",
-                    tint = Color.White,
+                    Icons.Default.Error,
+                    contentDescription = null,
+                    tint = AnimeError,
                     modifier = Modifier.size(48.dp)
                 )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    "Error playing video",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    playerError ?: "Unknown error",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                TextButton(onClick = onBack) {
+                    Text("Go Back", color = AnimeBlue)
+                }
+            }
+        } else {
+            // Video Player
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = false
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { showControls = !showControls }
+            )
+
+            // Controls overlay - Top bar
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn() + slideInVertically { -it },
+                exit = fadeOut() + slideOutVertically { -it },
+                modifier = Modifier.align(Alignment.TopCenter)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)
+                            )
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Back",
+                            tint = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        videoPath.substringAfterLast("/"),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+
+            // Center play/pause
+            AnimatedVisibility(
+                visible = showControls,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                IconButton(
+                    onClick = {
+                        try {
+                            if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                        } catch (_: Exception) {}
+                    },
+                    modifier = Modifier.size(64.dp)
+                ) {
+                    Icon(
+                        if (exoPlayer.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (exoPlayer.isPlaying) "Pause" else "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(48.dp)
+                    )
+                }
             }
         }
     }

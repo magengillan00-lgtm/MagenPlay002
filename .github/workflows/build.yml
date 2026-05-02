@@ -30,7 +30,7 @@ jobs:
         path: |
           ~/.gradle/caches
           ~/.gradle/wrapper
-        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle-wrapper.properties') }}
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle-kts', '**/gradle-wrapper.properties') }}
         restore-keys: ${{ runner.os }}-gradle
 
     - name: Grant execute permission for gradlew
@@ -54,20 +54,40 @@ jobs:
         name: app-release
         path: app/build/outputs/apk/release/*.apk
 
+    - name: Delete old release
+      uses: dev-drprasad/delete-tag-and-release@v1.0
+      with:
+        tag_name: v1.1.0
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+      continue-on-error: true
+
     - name: Create Release with APK
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: v1.0.0
-        name: Magen Play 002 v1.0.0
+        tag_name: v1.1.0
+        name: Magen Play 002 v1.1.0 - Bug Fix Release
         body: |
-          ## Magen Play 002 - First Release
+          ## Magen Play 002 v1.1.0 - Bug Fix Release
           
-          Features:
+          ### Fixed Issues:
+          - **App crash on launch** - Added proper runtime permission handling
+          - **Storage permission not requested** - Now properly requests READ_EXTERNAL_STORAGE on Android 8-12 and READ_MEDIA_VIDEO on Android 13+
+          - **Compatibility with Honor 8X** - Lowered minSdk to 21 and targetSdk to 33
+          - **MediaStore query errors** - Added error handling and fallback queries
+          - **Player crash on invalid paths** - Added URI validation and error states
+          - **Removed MANAGE_EXTERNAL_STORAGE** - This permission was causing issues
+          - **Fixed Edge-to-Edge compatibility** - Better support for older Android versions
+          - **Removed MediaSessionService** - Was causing crashes on some devices
+          - **Fixed tab navigation** - Tabs now properly switch between Player/Editor/Converter
+          
+          ### Features:
           - Video Player with anime style UI
           - Video Trimmer/Editor
-          - Video to MP3 Converter
-          - Multiple audio format support (MP3, AAC, WAV, FLAC, OGG, M4A)
+          - Video to MP3/AAC Converter
+          - Multiple audio format support
           - Dark anime-themed interface
+          - Permission request screen
+          - Error handling and user feedback
         files: |
           app/build/outputs/apk/debug/*.apk
           app/build/outputs/apk/release/*.apk

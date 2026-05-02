@@ -9,14 +9,19 @@ android {
 
     defaultConfig {
         applicationId = "com.magenplay002.app"
-        minSdk = 24
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        minSdk = 21
+        targetSdk = 33
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+
+        // Support for all CPU architectures including Honor 8X
+        ndk {
+            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
         }
     }
 
@@ -56,7 +61,6 @@ android {
         }
     }
 
-    // Prevent configuration cache issues
     lint {
         abortOnError = false
     }
@@ -87,23 +91,15 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.2.1")
     implementation("androidx.media3:media3-ui:1.2.1")
     implementation("androidx.media3:media3-common:1.2.1")
-    implementation("androidx.media3:media3-session:1.2.1")
     implementation("androidx.media3:media3-exoplayer-dash:1.2.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.2.1")
     implementation("androidx.media3:media3-exoplayer-smoothstreaming:1.2.1")
-
-    // Using Android's built-in MediaCodec/MediaMuxer/MediaExtractor APIs
-    // for video trimming and audio extraction (no FFmpeg dependency needed)
 
     // Material Design
     implementation("com.google.android.material:material:1.11.0")
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
-
-    // Accompanist
-    implementation("com.google.accompanist:accompanist-permissions:0.34.0")
-    implementation("com.google.accompanist:accompanist-systemuicontroller:0.34.0")
 
     // DocumentFile for SAF
     implementation("androidx.documentfile:documentfile:1.0.1")

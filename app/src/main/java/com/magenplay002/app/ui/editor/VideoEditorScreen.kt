@@ -1,6 +1,7 @@
 package com.magenplay002.app.ui.editor
 
 import android.net.Uri
+import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -20,7 +21,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.magenplay002.app.MagenPlayApp
 import com.magenplay002.app.ui.theme.*
 import com.magenplay002.app.util.FFmpegUtils
 import com.magenplay002.app.util.FileUtils
@@ -28,6 +28,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.FileOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,17 +55,33 @@ fun VideoEditorScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let {
-            val path = getRealPathFromUri(context, it)
-            if (path != null) {
-                selectedVideoPath = path
-                selectedVideoName = FileUtils.getFileName(context, it)
-                // Get video info
-                val info = FFmpegUtils.getMediaInfo(path)
-                if (info != null) {
-                    videoDuration = info.duration
-                    startMs = 0L
-                    endMs = info.duration
+            try {
+                val path = getRealPathFromUri(context, it)
+                if (path != null) {
+                    selectedVideoPath = path
+                    selectedVideoName = FileUtils.getFileName(context, it)
+                    val info = FFmpegUtils.getMediaInfo(path)
+                    if (info != null) {
+                        videoDuration = info.duration
+                        startMs = 0L
+                        endMs = info.duration
+                    }
+                } else {
+                    // Try to copy file to cache for SAF URIs
+                    val copiedPath = copyUriToCache(context, it)
+                    if (copiedPath != null) {
+                        selectedVideoPath = copiedPath
+                        selectedVideoName = FileUtils.getFileName(context, it)
+                        val info = FFmpegUtils.getMediaInfo(copiedPath)
+                        if (info != null) {
+                            videoDuration = info.duration
+                            startMs = 0L
+                            endMs = info.duration
+                        }
+                    }
                 }
+            } catch (e: Exception) {
+                statusMessage = "Error selecting video: ${e.message}"
             }
         }
     }
@@ -217,31 +234,36 @@ fun VideoEditorScreen(
                                 statusMessage = "Processing..."
                                 progress = 0f
 
-                                val outputDir = MagenPlayApp.getOutputDirectory()
-                                FFmpegUtils.ensureOutputDir(outputDir)
+                                try {
+                                    val outputDir = getOutputDirectory()
+                                    FFmpegUtils.ensureOutputDir(outputDir)
 
-                                val outputName = "${FileUtils.getFileNameWithoutExtension(selectedVideoName)}_trimmed.mp4"
-                                val outputPath = "$outputDir/$outputName"
+                                    val outputName = "${FileUtils.getFileNameWithoutExtension(selectedVideoName)}_trimmed.mp4"
+                                    val outputPath = "$outputDir/$outputName"
 
-                                withContext(Dispatchers.IO) {
-                                    FFmpegUtils.trimVideo(
-                                        inputPath = selectedVideoPath,
-                                        outputPath = outputPath,
-                                        startTimeMs = startMs,
-                                        endTimeMs = endMs,
-                                        onProgress = { p ->
-                                            progress = p.toFloat()
-                                        },
-                                        onComplete = { success, error ->
-                                            isProcessing = false
-                                            if (success) {
-                                                isCompleted = true
-                                                statusMessage = "Video trimmed successfully!"
-                                            } else {
-                                                statusMessage = "Error: $error"
+                                    withContext(Dispatchers.IO) {
+                                        FFmpegUtils.trimVideo(
+                                            inputPath = selectedVideoPath,
+                                            outputPath = outputPath,
+                                            startTimeMs = startMs,
+                                            endTimeMs = endMs,
+                                            onProgress = { p ->
+                                                progress = p.toFloat()
+                                            },
+                                            onComplete = { success, error ->
+                                                isProcessing = false
+                                                if (success) {
+                                                    isCompleted = true
+                                                    statusMessage = "Video trimmed successfully! Saved to: $outputPath"
+                                                } else {
+                                                    statusMessage = "Error: $error"
+                                                }
                                             }
-                                        }
-                                    )
+                                        )
+                                    }
+                                } catch (e: Exception) {
+                                    isProcessing = false
+                                    statusMessage = "Error: ${e.message}"
                                 }
                             }
                         }
@@ -286,9 +308,39 @@ fun VideoEditorScreen(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    statusMessage,
+                                    "Video trimmed successfully!",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = AnimeSuccess
+                                )
+                            }
+                        }
+                    }
+
+                    if (statusMessage.isNotEmpty() && !isCompleted && !isProcessing) {
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = AnimeError.copy(alpha = 0.15f))
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Error,
+                                    contentDescription = null,
+                                    tint = AnimeError,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    statusMessage,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = AnimeError,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f)
                                 )
                             }
                         }
@@ -330,8 +382,8 @@ fun AnimeTimeline(
                 modifier = Modifier
                     .fillMaxHeight()
                     .padding(
-                        start = (startPos * 300).dp,
-                        end = ((1f - endPos) * 300).dp
+                        start = (startPos * 280).dp,
+                        end = ((1f - endPos) * 280).dp
                     )
                     .clip(RoundedCornerShape(6.dp))
                     .background(
@@ -431,13 +483,41 @@ fun AnimeButton(
 }
 
 private fun getRealPathFromUri(context: android.content.Context, uri: Uri): String? {
-    val projection = arrayOf(android.provider.MediaStore.Video.Media.DATA)
-    val cursor = context.contentResolver.query(uri, projection, null, null, null)
-    cursor?.use {
-        if (it.moveToFirst()) {
-            val columnIndex = it.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DATA)
-            return it.getString(columnIndex)
+    try {
+        val projection = arrayOf(android.provider.MediaStore.Video.Media.DATA)
+        val cursor = context.contentResolver.query(uri, projection, null, null, null)
+        cursor?.use {
+            if (it.moveToFirst()) {
+                val columnIndex = it.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DATA)
+                val path = it.getString(columnIndex)
+                if (path != null && File(path).exists()) {
+                    return path
+                }
+            }
         }
+    } catch (e: Exception) {
+        // Fallback for SAF URIs
     }
     return null
+}
+
+private fun copyUriToCache(context: android.content.Context, uri: Uri): String? {
+    return try {
+        val fileName = FileUtils.getFileName(context, uri)
+        val tempFile = File(context.cacheDir, fileName)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            FileOutputStream(tempFile).use { output ->
+                input.copyTo(output)
+            }
+        }
+        tempFile.absolutePath
+    } catch (e: Exception) {
+        null
+    }
+}
+
+private fun getOutputDirectory(): String {
+    return Environment.getExternalStoragePublicDirectory(
+        Environment.DIRECTORY_MOVIES
+    ).absolutePath + "/MagenPlay"
 }
